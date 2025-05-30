@@ -1,166 +1,79 @@
-name: Build DOCX Document
+name: Convert Markdown to DOCX
 
 on:
-  # Запуск при push в main ветку
   push:
     branches: [ main, master ]
     paths:
-      - 'src/chapters/**'
-      - 'src/bibliography/**'
-      - 'build/bib_styles/**'
+      - '**.md'
       - '.github/workflows/build-docx.yml'
-  
-  # Запуск при pull request
   pull_request:
     branches: [ main, master ]
     paths:
-      - 'src/chapters/**'
-      - 'src/bibliography/**'
-      - 'build/bib_styles/**'
-  
-  # Возможность ручного запуска
+      - '**.md'
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-    
-    - name: Setup pandoc
-      uses: r-lib/actions/setup-pandoc@v2
-      with:
-        pandoc-version: '3.1.9' # Используем последнюю стабильную версию
-    
-    - name: Create build directory
-      run: mkdir -p build
-    
-    - name: Build DOCX document
-      run: |
-        # Установка переменных
-        SRC_DIR="src"
-        BIB_FILE="${SRC_DIR}/bibliography/primary_1960_2025.json"
-        OUTPUT_FILE="build/lung_cancer_screening.docx"
-        
-        # Список глав в правильном порядке
-        CHAPTERS=(
-          "${SRC_DIR}/chapters/00_intro.md"
-          "${SRC_DIR}/chapters/01_xray.md"
-          "${SRC_DIR}/chapters/01_0_xray_tech.md"
-          "${SRC_DIR}/chapters/02_ct.md"
-          "${SRC_DIR}/chapters/03_comparison.md"
-        )
-        
-        # Проверка существования файлов
-        echo "Проверка файлов глав..."
-        EXISTING_CHAPTERS=""
-        for chapter in "${CHAPTERS[@]}"; do
-          if [ -f "$chapter" ]; then
-            echo "✓ Найден: $chapter"
-            EXISTING_CHAPTERS="$EXISTING_CHAPTERS $chapter"
-          else
-            echo "✗ Не найден: $chapter"
-          fi
-        done
-        
-        # Проверка библиографии
-        if [ -f "$BIB_FILE" ]; then
-          echo "✓ Библиографический файл найден: $BIB_FILE"
-        else
-          echo "✗ Библиографический файл не найден: $BIB_FILE"
-          exit 1
-        fi
-        
-        # Сборка документа
-        echo "Запуск pandoc для создания документа..."
-        pandoc \
-          --standalone \
-          --toc \
-          --toc-depth=3 \
-          --citeproc \
-          --number-sections \
-          --bibliography="$BIB_FILE" \
-          --csl=./build/bib_styles/gost-r-7-0-5-2008-numeric-iaa.csl \
-          -o "$OUTPUT_FILE" \
-          $EXISTING_CHAPTERS
-        
-        # Проверка результата
-        if [ -f "$OUTPUT_FILE" ]; then
-          echo "✓ Документ успешно создан: $OUTPUT_FILE"
-          echo "Размер файла: $(ls -lh $OUTPUT_FILE | awk '{print $5}')"
-        else
-          echo "✗ Ошибка при создании документа"
-          exit 1
-        fi
-    
-    - name: Upload DOCX as artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lung-cancer-screening-docx
-        path: build/lung_cancer_screening.docx
-        retention-days: 30
-    
-    # Опционально: создание релиза при push в main
-    - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main && github.event.head_commit.message == 'release'
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: v${{ github.run_number }}
-        name: Build ${{ github.run_number }}
-        draft: false
-        prerelease: false
-        files: build/lung_cancer_screening.docx
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Дополнительная работа для проверки качества
-  check-markdown:
+  convert:
     runs-on: ubuntu-latest
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
     
-    - name: Check markdown files
+    - name: Setup pandoc
+      uses: r-lib/actions/setup-pandoc@v2
+      with:
+        pandoc-version: '3.1.9' # Используем последнюю стабильную версию
+    
+    
+    - name: Create output directory
+      run: mkdir -p output
+    
+    - name: Convert ct_arteriohepaticography.md to DOCX
       run: |
-        echo "Проверка markdown файлов на наличие проблем..."
-        
-        # Проверка на наличие битых ссылок в markdown
-        for file in src/chapters/*.md; do
+        pandoc ct_arteriohepaticography.md \
+          -f markdown \
+          -t docx \
+          --reference-doc=reference.docx \
+          --filter pandoc-citeproc \
+          --csl=gost-r-7-0-5-2008-numeric-iaa.csl \
+          --bibliography=references.bib \
+          --toc \
+          --toc-depth=3 \
+          --number-sections \
+          -o output/ct_arteriohepaticography.docx
+      continue-on-error: true
+    
+    - name: Convert all markdown files (fallback without bibliography)
+      run: |
+        for file in *.md; do
           if [ -f "$file" ]; then
-            echo "Проверка $file..."
-            
-            # Проверка на наличие TODO комментариев
-            if grep -n "TODO:" "$file"; then
-              echo "⚠️  Найдены TODO комментарии в $file"
-            fi
-            
-            # Проверка на наличие пустых ссылок
-            if grep -E "\[@[^\]]*\]" "$file" | grep -v "\[@[a-zA-Z0-9_-]+\]"; then
-              echo "⚠️  Возможны проблемы с ссылками в $file"
-            fi
+            output_name="output/${file%.md}.docx"
+            echo "Converting $file to $output_name"
+            pandoc "$file" \
+              -f markdown \
+              -t docx \
+              --toc \
+              --toc-depth=3 \
+              --number-sections \
+              -o "$output_name" || echo "Failed to convert $file"
           fi
         done
     
-    - name: Count statistics
+    - name: Upload DOCX artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: docx-documents
+        path: output/*.docx
+        retention-days: 30
+    
+    - name: Commit DOCX files back to repository (optional)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
-        echo "📊 Статистика документа:"
-        echo "------------------------"
-        
-        # Подсчет слов в главах
-        total_words=0
-        for file in src/chapters/*.md; do
-          if [ -f "$file" ]; then
-            words=$(wc -w < "$file")
-            echo "$(basename $file): $words слов"
-            total_words=$((total_words + words))
-          fi
-        done
-        echo "------------------------"
-        echo "Всего слов: $total_words"
-        
-        # Подсчет ссылок на литературу
-        total_refs=$(grep -ho "\[@[a-zA-Z0-9_-]*\]" src/chapters/*.md 2>/dev/null | sort -u | wc -l)
-        echo "Уникальных ссылок на литературу: $total_refs"
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add output/*.docx
+        git diff --staged --quiet || git commit -m "Auto-generate DOCX files from Markdown [skip ci]"
+        git push || echo "No changes to push"
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

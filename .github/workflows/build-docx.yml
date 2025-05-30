@@ -35,7 +35,7 @@ jobs:
           -f markdown \
           -t docx \
           --reference-doc=reference.docx \
-          --filter pandoc-citeproc \
+          --citeproc \
           --csl=gost-r-7-0-5-2008-numeric-iaa.csl \
           --bibliography=reference.json \
           --toc \

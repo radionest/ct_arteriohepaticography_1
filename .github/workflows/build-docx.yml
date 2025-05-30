@@ -34,7 +34,6 @@ jobs:
         pandoc ct_arteriohepaticography.md \
           -f markdown \
           -t docx \
-          --reference-doc=reference.docx \
           --citeproc \
           --csl=gost-r-7-0-5-2008-numeric-iaa.csl \
           --bibliography=reference.json \
@@ -43,22 +42,6 @@ jobs:
           --number-sections \
           -o output/ct_arteriohepaticography.docx
       continue-on-error: true
-    
-    - name: Convert all markdown files (fallback without bibliography)
-      run: |
-        for file in *.md; do
-          if [ -f "$file" ]; then
-            output_name="output/${file%.md}.docx"
-            echo "Converting $file to $output_name"
-            pandoc "$file" \
-              -f markdown \
-              -t docx \
-              --toc \
-              --toc-depth=3 \
-              --number-sections \
-              -o "$output_name" || echo "Failed to convert $file"
-          fi
-        done
     
     - name: Upload DOCX artifacts
       uses: actions/upload-artifact@v4

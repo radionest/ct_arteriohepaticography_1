@@ -37,7 +37,7 @@ jobs:
           --reference-doc=reference.docx \
           --filter pandoc-citeproc \
           --csl=gost-r-7-0-5-2008-numeric-iaa.csl \
-          --bibliography=references.bib \
+          --bibliography=reference.json \
           --toc \
           --toc-depth=3 \
           --number-sections \
